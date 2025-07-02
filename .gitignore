@@ -1,0 +1,6 @@
+# environemt variables
+/.env
+
+# Python cache files (Python Compiled files)
+__pycache__/
+*.pyc
