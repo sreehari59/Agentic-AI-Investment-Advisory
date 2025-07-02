@@ -72,3 +72,32 @@ CREATE TABLE backtest_portfolio_summary (
     return_percentage FLOAT,
     buy_hold_value FLOAT,
 );
+
+-- Create table InvestmentAgents
+CREATE TABLE InvestmentAgents (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    name NVARCHAR(100),
+    description NVARCHAR(MAX),
+    performance_ytd NVARCHAR(20),
+    total_trades INT,
+    sharpe_ratio DECIMAL(5,2),
+    win_rate NVARCHAR(20)
+);
+
+
+INSERT INTO InvestmentAgents (
+    name,
+    description,
+    performance_ytd,
+    total_trades,
+    sharpe_ratio,
+    win_rate
+)
+VALUES (
+    'Bill Ackman Agent',
+    'Prominent activist investor taking large, concentrated positions in undervalued companies and pushing for strategic changes. Combines fundamental analysis with active engagement to unlock shareholder value through operational improvements.',
+    24.10,
+    12,
+    1.42,
+    68.00
+);
