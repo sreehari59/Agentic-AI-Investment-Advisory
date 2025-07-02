@@ -1,1 +1,1 @@
-# ai_hedge_fund
+# Agentic AI Investment Advisory
