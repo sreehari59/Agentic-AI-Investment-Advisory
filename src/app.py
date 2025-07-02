@@ -38,6 +38,8 @@ from tools.api import (
 from utils.display import print_backtest_results, format_backtest_row
 import numpy as np
 import itertools
+import pyodbc
+import os
 
 # Load environment variables from .env file
 load_dotenv()
@@ -46,6 +48,10 @@ init(autoreset=True)
 
 app = Flask(__name__)
 CORS(app)
+
+def rows_to_dict_list(cursor):
+    columns = [column[0] for column in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 class Backtester:
     def __init__(
@@ -999,6 +1005,27 @@ def ai_hedge_fund():
     print("trade_decision:", trade_decision)
     
     return jsonify(trade_decision), 200
+
+@app.route('/get_ai_agents', methods=['GET'])
+def get_ai_agents():
+    db_server = os.getenv('DB_SERVER')
+    db_name = os.getenv('DB_NAME')
+    db_username = os.getenv('DB_USER')
+    db_password = os.getenv('DB_PASSWORD')
+    db_port = os.getenv('DB_PORT')
+    db_driver = os.getenv('DRIVER')
+    try:
+        with pyodbc.connect('DRIVER='+db_driver+';SERVER=tcp:'+db_server+';PORT='+db_port+';DATABASE='+db_name+';UID='+db_username+';PWD='+ db_password) as conn:
+            with conn.cursor() as cursor:
+                shipment_summary_query = "SELECT * FROM InvestmentAgents;"
+                cursor.execute(shipment_summary_query)
+                investment_agent_summary = rows_to_dict_list(cursor)
+
+    except Exception as e:
+        print("Error while reading data from SQL Server:", e)
+        return {"error": str(e)}, 500
+    
+    return  jsonify(investment_agent_summary), 200
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port="8080")
