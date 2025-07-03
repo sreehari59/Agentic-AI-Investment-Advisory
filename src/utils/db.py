@@ -158,7 +158,7 @@ def get_agent_data(result, agent_name, ticker, group_decision_id, llm_name="gpt-
    analyst_confidence = result["analyst_signals"][analyst_name][ticker]["confidence"]
    
    analysis_summary = extract_json(summarized_reponse)
-   print(analysis_summary)
+#    print(analysis_summary)
    agent_signals = ""
    return (ticker, analyst_name, signal, analyst_confidence, llm_name,
                datetime.datetime.now(), group_decision_id, agent_signals,
