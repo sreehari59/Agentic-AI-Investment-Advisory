@@ -101,3 +101,24 @@ VALUES (
     1.42,
     68.00
 );
+
+
+-- Create Table agent_backtest
+CREATE TABLE agent_backtest (
+    agent_name NVARCHAR(25),
+    trade_date DATE,
+    ticker NVARCHAR(10),
+    trade_action NVARCHAR(10),
+    quantity INT,
+    price DECIMAL(10, 2),
+    shares INT,
+    position_value DECIMAL(18, 2),
+    bullish INT,
+    bearish INT,
+    neutral INT,
+    cash FLOAT,
+	portfolio_value FLOAT,
+	return_total_PL FLOAT,
+	return_percentage FLOAT,
+	buy_hold_value FLOAT
+);
