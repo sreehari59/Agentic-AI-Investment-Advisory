@@ -36,6 +36,7 @@ from tools.api import (
     get_insider_trades,
 )
 from utils.display import print_backtest_results, format_backtest_row
+from utils.helper import get_agent_name
 import numpy as np
 import itertools
 import pyodbc
@@ -788,7 +789,7 @@ def create_workflow(selected_analysts=None):
 def ai_hedge_fund_back_test():
     data = request.get_json()
     tickers = data.get('tickers')
-    selected_analysts = data.get('analysts')
+    selected_analysts = get_agent_name(data.get('analysts'))    
     model_choice = data.get('model_choice', 'gpt-4o-mini')
     user_start_date = data.get('start_date', '2024-01-01')
     user_end_date = data.get('end_date', '2024-09-01')
@@ -898,7 +899,7 @@ def ai_hedge_fund_back_test():
 def ai_hedge_fund():
     data = request.get_json()
     ticker_name = data.get('tickers')
-    analyst = data.get('analysts')
+    analyst = get_agent_name(data.get('analysts'))  
     print("ticker_name:", ticker_name)
     model_choice = data.get('model_choice', 'gpt-4o-mini')
     timestamp_today = str(datetime.now().strftime("%Y-%m-%d"))
@@ -1026,6 +1027,40 @@ def get_ai_agents():
         return {"error": str(e)}, 500
     
     return  jsonify(investment_agent_summary), 200
+
+@app.route('/agent_strategy', methods=['POST'])
+def agent_strategy():
+    data = request.get_json()
+    analyst_name = get_agent_name(data.get('analysts'))  
+    db_server = os.getenv('DB_SERVER')
+    db_name = os.getenv('DB_NAME')
+    db_username = os.getenv('DB_USER')
+    db_password = os.getenv('DB_PASSWORD')
+    db_port = os.getenv('DB_PORT')
+    db_driver = os.getenv('DRIVER')
+    agent_data={}
+    try:
+        with pyodbc.connect('DRIVER='+db_driver+';SERVER=tcp:'+db_server+';PORT='+db_port+';DATABASE='+db_name+';UID='+db_username+';PWD='+ db_password) as conn:
+            with conn.cursor() as cursor:
+                agent_performance_query = """select trade_date, portfolio_value, buy_hold_value from agent_backtest 
+                                            where agent_name = ?;"""
+                cursor.execute(agent_performance_query, (analyst_name,))
+                agent_data["agent_performance"] = rows_to_dict_list(cursor)
+
+
+                agent_signal_query = """select sum(bullish) as bullish_signal,
+                                        sum(bearish) as bearish_signal, sum(neutral) as neutral_signal 
+                                        from agent_backtest  where agent_name = ?;"""
+                
+                cursor.execute(agent_signal_query, (analyst_name,))
+                agent_data["agent_signals"] = rows_to_dict_list(cursor)
+
+    except Exception as e:
+        print("Error while reading data from SQL Server:", e)
+        return {"error": str(e)}, 500
+    
+    return jsonify(agent_data), 200
+
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port="8080")
