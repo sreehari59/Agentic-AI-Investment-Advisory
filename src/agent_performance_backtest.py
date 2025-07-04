@@ -576,15 +576,6 @@ class Backtester:
         print(f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return:.2f}%{Style.RESET_ALL}")
         print(f"Total Realized Gains/Losses: {Fore.GREEN if total_realized_gains >= 0 else Fore.RED}${total_realized_gains:,.2f}{Style.RESET_ALL}")
 
-        # Plot the portfolio value over time
-        # plt.figure(figsize=(12, 6))
-        # plt.plot(performance_df.index, performance_df["Portfolio Value"], color="blue")
-        # plt.title("Portfolio Value Over Time")
-        # plt.ylabel("Portfolio Value ($)")
-        # plt.xlabel("Date")
-        # plt.grid(True)
-        # plt.show()
-
         # Compute daily returns
         performance_df["Daily Return"] = performance_df["Portfolio Value"].pct_change().fillna(0)
         daily_rf = 0.0434 / 252  # daily risk-free rate
@@ -653,15 +644,14 @@ class Backtester:
 
 def agent_performance():
 
-    # interested_analysts = ["cathie_wood", "charlie_munger",
-    #                        "warren_buffett", "technical_analyst", "fundamentals_analyst",
-    #                        "sentiment_analyst", "valuation_analyst"]
+    interested_analysts = ["ben_graham", "fundamentals_analyst",
+                           "sentiment_analyst", "valuation_analyst"]
 
-    interested_analysts = ["cathie_wood"]
+    # interested_analysts = ["cathie_wood"]
     for analyst in interested_analysts:
         tickers = ["MSFT"]
         user_start_date = "2024-01-01"
-        user_end_date = "2024-01-03"
+        user_end_date = "2024-08-01"
         user_inital_capital = 100000
         user_margin_requirement = 0.0
         selected_analysts = [analyst]
@@ -729,12 +719,10 @@ def agent_performance():
             df["Buy and Hold Value"] = 0
         
         
-        print("*************")
-        print(df)
-        df.to_csv(tickers[0] + "_" + selected_analysts[0] + "_" + user_start_date + "_to_" + user_end_date +".csv", index=False)
+        # df.to_csv(tickers[0] + "_" + selected_analysts[0] + "_" + user_start_date + "_to_" + user_end_date +".csv", index=False)
 
         updated_data = list(df.itertuples(index=False, name=None))
-        # print(updated_data)
+        print(portfolio_summary)
         try:
             backtest_data_query = """INSERT INTO agent_backtest (trade_date, ticker, trade_action, quantity, 
                                         price, shares, position_value, bullish,
@@ -743,13 +731,13 @@ def agent_performance():
                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             insert_into_sql_server(backtest_data_query , updated_data)
 
-
-            # updated_portfolio_summary = [portfolio_summary + (portfolio_reference_id,)]
-            # portfolio_summary_data_query = """INSERT INTO backtest_portfolio_summary (total_return, total_realized_gains, sharpe_ratio, 
-            #                             max_drawdown, win_rate, win_loss_ratio, max_consecutive_wins, 
-            #                             max_consecutive_losses, agent_name)
-            #                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
-            # insert_into_sql_server(portfolio_summary_data_query , updated_portfolio_summary)
+            updated_portfolio_summary = []
+            updated_portfolio_summary = [portfolio_summary + (analyst,)]
+            portfolio_summary_data_query = """INSERT INTO agent_performance (total_return, total_realized_gains, sharpe_ratio, 
+                                        max_drawdown, win_rate, win_loss_ratio, max_consecutive_wins, 
+                                        max_consecutive_losses, agent_name)
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            insert_into_sql_server(portfolio_summary_data_query , updated_portfolio_summary)
         except Exception as e:
             print(f"Error inserting data into SQL Server: {e}")
 
