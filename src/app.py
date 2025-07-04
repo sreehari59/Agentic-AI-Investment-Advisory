@@ -36,7 +36,7 @@ from tools.api import (
     get_insider_trades,
 )
 from utils.display import print_backtest_results, format_backtest_row
-from utils.helper import get_agent_name, agent_mapper
+from utils.helper import get_agent_name, agent_mapper, portfolio_summary_computation
 import numpy as np
 import itertools
 import pyodbc
@@ -785,8 +785,8 @@ def create_workflow(selected_analysts=None):
     return workflow
 
 
-@app.route('/ai_hedge_fund_back_test', methods=['POST'])
-def ai_hedge_fund_back_test():
+@app.route('/ai_hedge_fund_back_test_realtime', methods=['POST'])
+def ai_hedge_fund_back_test_real_time():
     data = request.get_json()
     tickers = data.get('tickers')
     selected_analysts = get_agent_name(data.get('analysts'))    
@@ -1056,28 +1056,30 @@ def agent_strategy():
                 agent_data["agent_signals"] = rows_to_dict_list(cursor)
 
                 portfolio_value_start_date_query = """
-                                                    select top 1 position_value, trade_date from agent_backtest 
+                                                    select top 1 portfolio_value, trade_date from agent_backtest 
                                                     where agent_name = ? order by trade_date asc"""
                 cursor.execute(portfolio_value_start_date_query, (analyst_name,))
                 result = cursor.fetchone()
                 portfolio_value_start_date = result[0] if result else 0
 
                 portfolio_value_end_date_query = """
-                                                    select top 1 position_value, trade_date from agent_backtest 
+                                                    select top 1 portfolio_value, trade_date from agent_backtest 
                                                     where agent_name = ? order by trade_date desc"""
                 cursor.execute(portfolio_value_end_date_query, (analyst_name,))
                 result = cursor.fetchone()
                 portfolio_value_end_date = result[0] if result else 0
 
-                benchmark_return = round(((float(portfolio_value_end_date) - float(portfolio_value_start_date)) / float(portfolio_value_start_date)),2)
-                print("benchmark_return:", benchmark_return)
+                if float(portfolio_value_start_date) == 0:
+                    benchmark_return = 0.0
+                else:
+                    benchmark_return = round(((float(portfolio_value_end_date) - float(portfolio_value_start_date)) / float(portfolio_value_start_date)),2)
 
                 agent_performace_metrics_query = """select total_return, total_realized_gains, sharpe_ratio,
                                                     max_drawdown, win_rate from agent_performance 
                                                     where agent_name = ?;"""
                 cursor.execute(agent_performace_metrics_query, (analyst_name,))
                 agent_data["agent_performance_metric"] = rows_to_dict_list(cursor)
-                agent_data["agent_performance_metric"][0]["benchmark_return"] = "-0.04"
+                agent_data["agent_performance_metric"][0]["benchmark_return"] = benchmark_return
 
         print(agent_data["agent_performance_metric"])
     except Exception as e:
@@ -1085,6 +1087,61 @@ def agent_strategy():
         return {"error": str(e)}, 500
     
     return jsonify(agent_data), 200
+
+
+@app.route('/ai_hedge_fund_back_test', methods=['POST'])
+def ai_hedge_fund_back_test():
+    data = request.get_json()
+    tickers = data.get('tickers')
+    selected_analysts = get_agent_name(data.get('analysts'))[0]    
+    model_choice = data.get('model_choice', 'gpt-4o-mini')
+    user_start_date = data.get('start_date', '2024-01-01')
+    user_end_date = data.get('end_date', '2024-09-01')
+    new_columns=["Agent", "Date", "Ticker", "Action", "Quantity", "Price", "Shares",
+                "Position Value", "Bullish", "Bearish", "Neutral",
+                "Cash", "Portfolio Value", "Return total P&L",
+                "Return %", "Buy and Hold Value"]
+
+    db_server = os.getenv('DB_SERVER')
+    db_name = os.getenv('DB_NAME')
+    db_username = os.getenv('DB_USER')
+    db_password = os.getenv('DB_PASSWORD')
+    db_port = os.getenv('DB_PORT')
+    db_driver = os.getenv('DRIVER')
+    try:
+        with pyodbc.connect('DRIVER='+db_driver+';SERVER=tcp:'+db_server+';PORT='+db_port+';DATABASE='+db_name+';UID='+db_username+';PWD='+ db_password) as conn:
+            with conn.cursor() as cursor:
+                back_test_query = """select * from agent_backtest 
+                                        where agent_name = ? 
+                                        and (trade_date >= ?  and trade_date <= ?);"""
+                cursor.execute(back_test_query, (selected_analysts, user_start_date, user_end_date))
+                back_test_data = rows_to_dict_list(cursor)
+
+                # Executing with new version of manual computation of portfolio summary
+                # portfolio_summary_query = """select * from agent_performance 
+                #                         where agent_name = ?;"""
+                
+                # cursor.execute(portfolio_summary_query, (selected_analysts,))
+                # portfolio_summary = rows_to_dict_list(cursor)
+
+    except Exception as e:
+        print("Error while reading data from SQL Server:", e)
+        return {"error": str(e)}, 500
+
+    df = pd.DataFrame(back_test_data)
+    df.columns = new_columns
+    backtest_dict = df.to_dict(orient='records')
+
+    back_test_plot_data = {"Date": df['Date'].tolist(),
+                      "Portfolio Value": df['Portfolio Value'].tolist(),
+                      "Return total P&L": df['Return total P&L'].tolist()}
+
+    backtest_result = {
+        "backtest_data": backtest_dict,
+        "portfolio_summary": portfolio_summary_computation(df, user_start_date, user_end_date),
+        "back_test_plot": back_test_plot_data
+    }
+    return  jsonify(backtest_result), 200
 
 
 if __name__ == '__main__':
