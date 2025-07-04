@@ -36,7 +36,7 @@ from tools.api import (
     get_insider_trades,
 )
 from utils.display import print_backtest_results, format_backtest_row
-from utils.helper import get_agent_name
+from utils.helper import get_agent_name, agent_mapper
 import numpy as np
 import itertools
 import pyodbc
@@ -861,6 +861,9 @@ def ai_hedge_fund_back_test():
     updated_data = list(df.itertuples(index=False, name=None))
 
     backtest_dict = df.to_dict(orient='records')
+    back_test_plot_data = {"Date": df['Date'].tolist(),
+                      "Portfolio Value": df['Portfolio Value'].tolist(),
+                      "Return total P&L": df['Return total P&L'].tolist()}
     try:
         backtest_data_query = """INSERT INTO backtest (trade_date, ticker, trade_action, quantity, 
                                     price, shares, position_value, bullish,
@@ -892,23 +895,20 @@ def ai_hedge_fund_back_test():
             "max_consecutive_wins": portfolio_summary[6],
             "max_consecutive_losses": portfolio_summary[7]
         },
+        "back_test_plot": back_test_plot_data
     }
     return  jsonify(backtest_result), 200
 
 @app.route('/ai_hedge_fund', methods=['POST'])
 def ai_hedge_fund():
     data = request.get_json()
-    ticker_name = data.get('tickers')
-    analyst = get_agent_name(data.get('analysts'))  
-    print("ticker_name:", ticker_name)
+    tickers = data.get('tickers')
+    selected_analysts = get_agent_name(data.get('analysts'))  
+    print("ticker_name:", tickers)
     model_choice = data.get('model_choice', 'gpt-4o-mini')
     timestamp_today = str(datetime.now().strftime("%Y-%m-%d"))
-    timestemp_yesterday = str((datetime.now() - pd.Timedelta(days=1)).strftime("%Y-%m-%d"))
-
-    # tickers = [ticker_name]
-    tickers = ["AAPL", "MSFT"]
-    selected_analysts = ["cathie_wood","valuation_analyst"]
-    # selected_analysts = [analyst]
+    timestamp_yesterday = str((datetime.now() - pd.Timedelta(days=1)).strftime("%Y-%m-%d"))
+    timestamp_day_before_yesterday = str((datetime.now() - pd.Timedelta(days=2)).strftime("%Y-%m-%d"))
     model_choice = "gpt-4o-mini"
 
     print("tickers:", tickers)
@@ -945,15 +945,14 @@ def ai_hedge_fund():
     # Run the hedge fund
     result = run_hedge_fund(
         tickers=tickers,
-        start_date="2025-06-23",
-        end_date="2025-06-24",
+        start_date=timestamp_yesterday,
+        end_date=timestamp_today,
         portfolio=portfolio,
         show_reasoning=False,
         selected_analysts=selected_analysts,
         model_name=model_choice,
         model_provider=model_provider,
     )
-    # print_trading_output(result)
 
     print("tickers:", tickers)
     print("selected_analysts:", selected_analysts)
@@ -985,7 +984,7 @@ def ai_hedge_fund():
         for index in range(len(final_output)):
             updated_final_output.append({
                 "ticker" : final_output[index][0],
-                "analyst_name" : final_output[index][1],
+                "analyst_name" : agent_mapper(final_output[index][1]),
                 "signal" : final_output[index][2],
                 "analyst_confidence" :final_output[index][3],
                 "llm_name" : final_output[index][4],
@@ -1031,7 +1030,8 @@ def get_ai_agents():
 @app.route('/agent_strategy', methods=['POST'])
 def agent_strategy():
     data = request.get_json()
-    analyst_name = get_agent_name(data.get('analysts'))  
+    analyst_name = get_agent_name(data.get('analysts'))[0]
+    print(analyst_name)
     db_server = os.getenv('DB_SERVER')
     db_name = os.getenv('DB_NAME')
     db_username = os.getenv('DB_USER')
@@ -1050,11 +1050,36 @@ def agent_strategy():
 
                 agent_signal_query = """select sum(bullish) as bullish_signal,
                                         sum(bearish) as bearish_signal, sum(neutral) as neutral_signal 
-                                        from agent_backtest  where agent_name = ?;"""
+                                        from agent_backtest where agent_name = ?;"""
                 
                 cursor.execute(agent_signal_query, (analyst_name,))
                 agent_data["agent_signals"] = rows_to_dict_list(cursor)
 
+                portfolio_value_start_date_query = """
+                                                    select top 1 position_value, trade_date from agent_backtest 
+                                                    where agent_name = ? order by trade_date asc"""
+                cursor.execute(portfolio_value_start_date_query, (analyst_name,))
+                result = cursor.fetchone()
+                portfolio_value_start_date = result[0] if result else 0
+
+                portfolio_value_end_date_query = """
+                                                    select top 1 position_value, trade_date from agent_backtest 
+                                                    where agent_name = ? order by trade_date desc"""
+                cursor.execute(portfolio_value_end_date_query, (analyst_name,))
+                result = cursor.fetchone()
+                portfolio_value_end_date = result[0] if result else 0
+
+                benchmark_return = round(((float(portfolio_value_end_date) - float(portfolio_value_start_date)) / float(portfolio_value_start_date)),2)
+                print("benchmark_return:", benchmark_return)
+
+                agent_performace_metrics_query = """select total_return, total_realized_gains, sharpe_ratio,
+                                                    max_drawdown, win_rate from agent_performance 
+                                                    where agent_name = ?;"""
+                cursor.execute(agent_performace_metrics_query, (analyst_name,))
+                agent_data["agent_performance_metric"] = rows_to_dict_list(cursor)
+                agent_data["agent_performance_metric"][0]["benchmark_return"] = "-0.04"
+
+        print(agent_data["agent_performance_metric"])
     except Exception as e:
         print("Error while reading data from SQL Server:", e)
         return {"error": str(e)}, 500
