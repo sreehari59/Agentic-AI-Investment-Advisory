@@ -629,12 +629,12 @@ class Backtester:
         print(f"Max Consecutive Losses: {Fore.RED}{max_consecutive_losses}{Style.RESET_ALL}")
 
         portfolio_summary = (
-            str(total_return),
-            str(total_realized_gains),
-            str(annualized_sharpe),
-            str(max_drawdown),
-            str(win_rate),
-            str(win_loss_ratio),
+            str(round(total_return,2)),
+            str(round(total_realized_gains,2)),
+            str(round(annualized_sharpe,2)),
+            str(round(max_drawdown,2)),
+            str(round(win_rate,2)),
+            str(round(win_loss_ratio,2)),
             max_consecutive_wins,
             max_consecutive_losses
         )
@@ -644,10 +644,10 @@ class Backtester:
 
 def agent_performance():
 
-    interested_analysts = ["ben_graham", "fundamentals_analyst",
-                           "sentiment_analyst", "valuation_analyst"]
+    # interested_analysts = ["ben_graham", "fundamentals_analyst",
+    #                        "sentiment_analyst", "valuation_analyst"]
 
-    # interested_analysts = ["cathie_wood"]
+    interested_analysts = ["bill_ackman"]
     for analyst in interested_analysts:
         tickers = ["MSFT"]
         user_start_date = "2024-01-01"

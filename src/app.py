@@ -603,15 +603,6 @@ class Backtester:
         print(f"Total Return: {Fore.GREEN if total_return >= 0 else Fore.RED}{total_return:.2f}%{Style.RESET_ALL}")
         print(f"Total Realized Gains/Losses: {Fore.GREEN if total_realized_gains >= 0 else Fore.RED}${total_realized_gains:,.2f}{Style.RESET_ALL}")
 
-        # Plot the portfolio value over time
-        # plt.figure(figsize=(12, 6))
-        # plt.plot(performance_df.index, performance_df["Portfolio Value"], color="blue")
-        # plt.title("Portfolio Value Over Time")
-        # plt.ylabel("Portfolio Value ($)")
-        # plt.xlabel("Date")
-        # plt.grid(True)
-        # plt.show()
-
         # Compute daily returns
         performance_df["Daily Return"] = performance_df["Portfolio Value"].pct_change().fillna(0)
         daily_rf = 0.0434 / 252  # daily risk-free rate
@@ -863,7 +854,7 @@ def ai_hedge_fund_back_test_real_time():
     backtest_dict = df.to_dict(orient='records')
     back_test_plot_data = {"Date": df['Date'].tolist(),
                       "Portfolio Value": df['Portfolio Value'].tolist(),
-                      "Return total P&L": df['Return total P&L'].tolist()}
+                      "buy_hold_value": df['Buy and Hold Value'].tolist()}
     try:
         backtest_data_query = """INSERT INTO backtest (trade_date, ticker, trade_action, quantity, 
                                     price, shares, position_value, bullish,
@@ -976,7 +967,7 @@ def ai_hedge_fund():
         # insert_into_sql_server(agent_data_query , final_output)
         # insert_trade_decision(result, ticker_val, group_decision_id)
 
-        trade_decision_confidence = result["decisions"][ticker_val]["confidence"]
+        trade_decision_confidence = int(result["decisions"][ticker_val]["confidence"])
         trade_decision_quantity = result["decisions"][ticker_val]["quantity"]
         trade_decision_action = result["decisions"][ticker_val]["action"]
         trade_decision_reasoning = result["decisions"][ticker_val]["reasoning"]
@@ -1014,18 +1005,37 @@ def get_ai_agents():
     db_password = os.getenv('DB_PASSWORD')
     db_port = os.getenv('DB_PORT')
     db_driver = os.getenv('DRIVER')
+    agent_details = {}
     try:
         with pyodbc.connect('DRIVER='+db_driver+';SERVER=tcp:'+db_server+';PORT='+db_port+';DATABASE='+db_name+';UID='+db_username+';PWD='+ db_password) as conn:
             with conn.cursor() as cursor:
-                shipment_summary_query = "SELECT * FROM InvestmentAgents;"
-                cursor.execute(shipment_summary_query)
-                investment_agent_summary = rows_to_dict_list(cursor)
+                agent_summary_query = "SELECT * FROM InvestmentAgents;"
+                cursor.execute(agent_summary_query)
+                agent_details["investment_agent_summary"] = rows_to_dict_list(cursor)
+
+
+                agent_performance_query = """select total_return as performance, sharpe_ratio, win_rate, 
+                                            agent_name from agent_performance"""
+                cursor.execute(agent_performance_query)
+                agent_details["investment_agent_performance"] = rows_to_dict_list(cursor)
+
+                agent_total_trades = """SELECT 
+                                        a.agent_name,
+                                        COUNT(b.trade_action) AS total_trades
+                                    FROM 
+                                        (SELECT DISTINCT agent_name FROM agent_backtest) a
+                                    LEFT JOIN 
+                                        agent_backtest b
+                                        ON a.agent_name = b.agent_name AND LOWER(b.trade_action) <> 'hold'
+                                    GROUP BY a.agent_name;"""
+                cursor.execute(agent_total_trades)
+                agent_details["agent_total_trades"] = rows_to_dict_list(cursor)
 
     except Exception as e:
         print("Error while reading data from SQL Server:", e)
         return {"error": str(e)}, 500
     
-    return  jsonify(investment_agent_summary), 200
+    return  jsonify(agent_details), 200
 
 @app.route('/agent_strategy', methods=['POST'])
 def agent_strategy():
@@ -1132,9 +1142,12 @@ def ai_hedge_fund_back_test():
     df.columns = new_columns
     backtest_dict = df.to_dict(orient='records')
 
+    print(df.head())
+    print(df.columns)
+
     back_test_plot_data = {"Date": df['Date'].tolist(),
-                      "Portfolio Value": df['Portfolio Value'].tolist(),
-                      "Return total P&L": df['Return total P&L'].tolist()}
+                      "portfolio_value": df['Portfolio Value'].tolist(),
+                      "buy_hold_value": df['Buy and Hold Value'].tolist()}
 
     backtest_result = {
         "backtest_data": backtest_dict,
