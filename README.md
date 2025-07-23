@@ -1,5 +1,6 @@
 # Agentic AI Investment Advisory
 
+Please find the application [here](https://auto-wealth-navigator.vercel.app/) 
 
 ## Installation
 1. Create a python virtual env
